@@ -1,4 +1,5 @@
-const { Plugin } = require('obsidian');
+const { Plugin, PluginSettingTab, App, Setting } = require('obsidian');
+
 
 class OpenAISummaryPlugin extends Plugin {
   async onload() {
@@ -7,13 +8,24 @@ class OpenAISummaryPlugin extends Plugin {
       name: 'Create Flashcard for file',
       callback: () => this.summarizeNote(),
     });
+
+    this.addSettingTab(new OpenAISummarySettingTab(this.app, this));
+    this.settings = await this.loadData() || { apiKey: '' };
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
   }
 
   async summarizeNote() {
-    const openAI_API_KEY = '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';
     const currentFile = this.app.workspace.getActiveFile();
     const summaryFolderPath = '07-learning';
 
+    if (!this.settings.apiKey || this.settings.apiKey.trim() === '') {
+      console.warn('OpenAI API key not set. Please configure it in the plugin settings.');
+      return;
+    }
+    
     if (!currentFile) {
       return;
     }
@@ -26,19 +38,20 @@ class OpenAISummaryPlugin extends Plugin {
     const updatedContent = fileContent + `\n ${link}`;
     await this.app.vault.modify(currentFile, updatedContent);
 
-    this.createSummary(currentFile, summaryFilePath, openAI_API_KEY).catch((error) => {
+    this.createSummary(currentFile, summaryFilePath).catch((error) => {
       console.error('Error creating summary:', error);
     });
   }
 
-  async createSummary(currentFile, summaryFilePath, apiKey) {
+  async createSummary(currentFile, summaryFilePath) {
+    const apiKey = this.settings.apiKey;
     const fileContent = await this.app.vault.read(currentFile);
     const summary = await this.sendToOpenAI(fileContent, apiKey);
-  
+
     if (summary) {
       const taggedSummary = summary + '\n\n#learning';
       const existingSummaryFile = this.app.vault.getAbstractFileByPath(summaryFilePath);
-  
+
       if (existingSummaryFile) {
         await this.app.vault.modify(existingSummaryFile, taggedSummary);
       } else {
@@ -89,5 +102,32 @@ class OpenAISummaryPlugin extends Plugin {
     return null;
   }
 }
+
+class OpenAISummarySettingTab extends PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    containerEl.createEl('h2', { text: 'OpenAI API Key Configuration' });
+
+    new Setting(containerEl)
+      .setName('API Key')
+      .setDesc('Enter your OpenAI API key')
+      .addText((text) => text
+        .setPlaceholder('Enter API key')
+        .setValue(this.plugin.settings.apiKey)
+        .onChange(async (value) => {
+          this.plugin.settings.apiKey = value;
+          await this.plugin.saveSettings();
+        }));
+  }
+}
+
+
 
 module.exports = OpenAISummaryPlugin;
