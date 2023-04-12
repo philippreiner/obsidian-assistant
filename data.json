@@ -1,3 +1,5 @@
 {
-  "apiKey": "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"
+  "apiKey": "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",
+  "prompt": "Write (multiple) flashcards that summarize relevant key items from the content. Each flashcard has a defined format that must have 3 lines: A short question, then a single ? and a third line with just the answer not longer than 2 sentences. A question is never numbered! Never output _ and any lines. Separate flashcards only with an empty line. \n\nExample: \n\nWhat are Flashcards?\n?\nSummaries for Learning.\n\nNever use sources, related items, links, topics and common knowledge. Correct facts if needed. If the content is short, find one more flashcard with a content related question. The Content:",
+  "folderPath": "07-learning"
 }

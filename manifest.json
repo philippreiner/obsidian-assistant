@@ -1,6 +1,6 @@
 {
     "id": "obsidian-openai-summary",
-    "name": "Create FlashCards",
+    "name": "FlashCard Generator",
     "version": "0.1.0",
     "description": "Summarize content and create a flashcard",
     "author": "Philipp Reiner",

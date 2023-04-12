@@ -5,13 +5,14 @@ class OpenAISummaryPlugin extends Plugin {
   async onload() {
     this.addCommand({
       id: 'create-flashcard',
-      name: 'Create Flashcard for file',
+      name: 'Flashcard for file',
       callback: () => this.summarizeNote(),
     });
 
     this.addSettingTab(new OpenAISummarySettingTab(this.app, this));
-    this.settings = await this.loadData() || { apiKey: '' };
+    this.settings = await this.loadData() || { apiKey: '', prompt: 'Create short flashcards for:', folderPath: '07-learning' };
   }
+
 
   async saveSettings() {
     await this.saveData(this.settings);
@@ -19,39 +20,59 @@ class OpenAISummaryPlugin extends Plugin {
 
   async summarizeNote() {
     const currentFile = this.app.workspace.getActiveFile();
-    const summaryFolderPath = '07-learning';
-
+  
     if (!this.settings.apiKey || this.settings.apiKey.trim() === '') {
       console.warn('OpenAI API key not set. Please configure it in the plugin settings.');
       return;
     }
-    
+  
+    if (!this.settings.folderPath || this.settings.folderPath.trim() === '') {
+      console.warn('Folder path not set. Please configure it in the plugin settings.');
+      return;
+    }
+  
     if (!currentFile) {
       return;
     }
-
-    const summaryFileName = `${currentFile.basename}-flashcard.md`;
-    const summaryFilePath = `${summaryFolderPath}/${summaryFileName}`;
-
-    const link = `[[${summaryFilePath}|Learning Flashcard]]`;
-    const fileContent = await this.app.vault.read(currentFile);
-    const updatedContent = fileContent + `\n ${link}`;
-    await this.app.vault.modify(currentFile, updatedContent);
-
-    this.createSummary(currentFile, summaryFilePath).catch((error) => {
+  
+    const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
+    const cursorPosition = editor.getCursor();
+    const placeholderText = 'Generating Flashcard...';
+    editor.replaceRange(placeholderText, cursorPosition);
+  
+    this.createSummary(currentFile, cursorPosition, placeholderText).catch((error) => {
       console.error('Error creating summary:', error);
+      editor.replaceRange('', { line: cursorPosition.line, ch: cursorPosition.ch - placeholderText.length }, cursorPosition);
     });
   }
 
-  async createSummary(currentFile, summaryFilePath) {
+  async createSummary(currentFile, cursorPosition, placeholderText) {
     const apiKey = this.settings.apiKey;
     const fileContent = await this.app.vault.read(currentFile);
     const summary = await this.sendToOpenAI(fileContent, apiKey);
 
+    // Remove the "Generating Flashcard" placeholder text
+    const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
+    editor.replaceRange('', { line: cursorPosition.line, ch: cursorPosition.ch }, { line: cursorPosition.line, ch: cursorPosition.ch + placeholderText.length });
+  
     if (summary) {
-      const taggedSummary = summary + '\n\n#learning';
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const summaryFolderPath = `${this.settings.folderPath}/${currentMonth}`;
+      const summaryFileName = `Flashcard-${currentFile.basename}.md`;
+      const summaryFilePath = `${summaryFolderPath}/${summaryFileName}`;
+  
+      const link = `[[${summaryFilePath}|Learning Flashcard]]`;
+      const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
+      editor.replaceRange(link, cursorPosition);
+      editor.focus();
+  
+      const taggedSummary = summary + `\n\n#learning #learning/${currentMonth}`;
       const existingSummaryFile = this.app.vault.getAbstractFileByPath(summaryFilePath);
-
+  
+      if (!this.app.vault.getAbstractFileByPath(summaryFolderPath)) {
+        await this.app.vault.createFolder(summaryFolderPath);
+      }
+  
       if (existingSummaryFile) {
         await this.app.vault.modify(existingSummaryFile, taggedSummary);
       } else {
@@ -64,7 +85,7 @@ class OpenAISummaryPlugin extends Plugin {
   
 
   async sendToOpenAI(content, apiKey) {
-    const my_prompt = "Write (multiple) flashcards that summarize relevant key items from content. Each flashcard must have 3 lines: A short question, then a single ? and a third line with just the answer not longer than 2 sentences. Example: ```What are Flashcards?\n?\nSummaries for Learning\n``` Never use sources, related items, links, topics and common knowledge for flashcards. Correct facts if needed. If the content is short, try to find one more flashcard that with a relevant question. Questions are not numbered! The Content: ";
+    const my_prompt = this.settings.prompt.trim();
     const requestOptions = {
       method: 'POST',
       headers: {
@@ -113,7 +134,7 @@ class OpenAISummarySettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'OpenAI API Key Configuration' });
+    containerEl.createEl('h2', { text: 'Setup Flashcard Generation' });
 
     new Setting(containerEl)
       .setName('API Key')
@@ -125,6 +146,28 @@ class OpenAISummarySettingTab extends PluginSettingTab {
           this.plugin.settings.apiKey = value;
           await this.plugin.saveSettings();
         }));
+    new Setting(containerEl)
+      .setName('Folder path')
+      .setDesc('where to create the files')
+      .addText((text) => text
+        .setPlaceholder('/path/')
+        .setValue(this.plugin.settings.folderPath)
+        .onChange(async (value) => {
+          this.plugin.settings.folderPath = value;
+          await this.plugin.saveSettings();
+        }));
+    
+      new Setting(containerEl)
+        .setName('Prompt')
+        .setDesc('How to create flashcards')
+        .addTextArea((textarea) => textarea
+          .setPlaceholder('Create short memorable flashcards')
+          .setValue(this.plugin.settings.prompt)
+          .onChange(async (value) => {
+            this.plugin.settings.prompt = value;
+            await this.plugin.saveSettings();
+          }));
+        
   }
 }
 
