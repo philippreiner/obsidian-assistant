@@ -5,12 +5,19 @@ class OpenAISummaryPlugin extends Plugin {
   async onload() {
     this.addCommand({
       id: 'create-flashcard',
-      name: 'Flashcard for file',
+      name: 'Flashcard creation for this file',
       callback: () => this.summarizeNote(),
     });
 
+    this.addCommand({
+      id: 'generate-more-content',
+      name: 'Research Details',
+      callback: () => this.generateMoreContent(),
+    });
+
+
     this.addSettingTab(new OpenAISummarySettingTab(this.app, this));
-    this.settings = await this.loadData() || { apiKey: '', prompt: 'Create short flashcards for:', folderPath: '07-learning' };
+    this.settings = await this.loadData() || { apiKey: '', prompt: 'Create short flashcards for:', moreContentPrompt: 'Give additional facts about this topic in short bullet points:', folderPath: '07-learning' };
   }
 
 
@@ -37,7 +44,7 @@ class OpenAISummaryPlugin extends Plugin {
   
     const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
     const cursorPosition = editor.getCursor();
-    const placeholderText = 'Generating Flashcard...';
+    const placeholderText = '👩‍🏫 Generating Flashcard...';
     editor.replaceRange(placeholderText, cursorPosition);
   
     this.createSummary(currentFile, cursorPosition, placeholderText).catch((error) => {
@@ -47,9 +54,8 @@ class OpenAISummaryPlugin extends Plugin {
   }
 
   async createSummary(currentFile, cursorPosition, placeholderText) {
-    const apiKey = this.settings.apiKey;
     const fileContent = await this.app.vault.read(currentFile);
-    const summary = await this.sendToOpenAI(fileContent, apiKey);
+    const summary = await this.sendToOpenAI(fileContent, 'summary');
 
     // Remove the "Generating Flashcard" placeholder text
     const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
@@ -82,10 +88,53 @@ class OpenAISummaryPlugin extends Plugin {
       console.error('Failed to get summary from OpenAI API.');
     }
   }
+
+  async generateMoreContent() {
+    const currentFile = this.app.workspace.getActiveFile();
+
+    if (!this.settings.apiKey || this.settings.apiKey.trim() === '') {
+      console.warn('OpenAI API key not set. Please configure it in the plugin settings.');
+      return;
+    }
+
+    if (!currentFile) {
+      return;
+    }
+
+    const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
+    const cursorPosition = editor.getCursor();
+    const placeholderText = '🕵️ Researching ...';
+    editor.replaceRange(placeholderText, cursorPosition);
+
+    this.createMoreContent(currentFile, cursorPosition, placeholderText).catch((error) => {
+      console.error('Error generating more content:', error);
+      editor.replaceRange('', { line: cursorPosition.line, ch: cursorPosition.ch - placeholderText.length }, cursorPosition);
+    });
+  }
+
+  async createMoreContent(currentFile, cursorPosition, placeholderText) {
+    const fileContent = await this.app.vault.read(currentFile);
+    const moreContent = await this.sendToOpenAI(fileContent, 'moreContent');
+
+
+    const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
+    editor.replaceRange('', { line: cursorPosition.line, ch: cursorPosition.ch }, { line: cursorPosition.line, ch: cursorPosition.ch + placeholderText.length });
+
+    if (moreContent) {
+      editor.replaceRange(moreContent, cursorPosition);
+      editor.focus();
+    } else {
+      console.error('Failed to get more content from OpenAI API.');
+    }
+  }
   
 
-  async sendToOpenAI(content, apiKey) {
-    const my_prompt = this.settings.prompt.trim();
+  async sendToOpenAI(content, promptType) {
+    const apiKey = this.settings.apiKey;
+    const currentFile = this.app.workspace.getActiveFile();
+    const fileName = currentFile.basename;
+    const prompt = promptType === 'summary' ? this.settings.prompt : this.settings.moreContentPrompt;
+
     const requestOptions = {
       method: 'POST',
       headers: {
@@ -96,12 +145,12 @@ class OpenAISummaryPlugin extends Plugin {
         messages: [
           {
             role: "system",
-            content: `You're a teacher that creates short and memorable flashcards for spaced repetition learning.`
+            content: `You're a consultant that answers the task prompted short for the given content. Don't explain yourself.`
           },
           {
-          role: "user",
-          content: `${my_prompt} \n\n${content}`
-        }],
+            role: "user",
+            content: `${prompt}  \n${fileName}\n${content}`
+          }],
         max_tokens: 512,
         model: "gpt-3.5-turbo",
         temperature: 0.8,
@@ -134,7 +183,7 @@ class OpenAISummarySettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'Setup Flashcard Generation' });
+    containerEl.createEl('h2', { text: 'General Setup' });
 
     new Setting(containerEl)
       .setName('API Key')
@@ -146,6 +195,9 @@ class OpenAISummarySettingTab extends PluginSettingTab {
           this.plugin.settings.apiKey = value;
           await this.plugin.saveSettings();
         }));
+
+        containerEl.createEl('h2', { text: 'Flashcards' });
+
     new Setting(containerEl)
       .setName('Folder path')
       .setDesc('where to create the files')
@@ -165,6 +217,18 @@ class OpenAISummarySettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.prompt)
           .onChange(async (value) => {
             this.plugin.settings.prompt = value;
+            await this.plugin.saveSettings();
+          }));
+      
+          containerEl.createEl('h2', { text: 'Content Generator' });
+          new Setting(containerEl)
+          .setName('More Content Prompt')
+          .setDesc('How to generate more content')
+          .addTextArea((textarea) => textarea
+          .setPlaceholder('Generate more content for:')
+          .setValue(this.plugin.settings.moreContentPrompt)
+          .onChange(async (value) => {
+            this.plugin.settings.moreContentPrompt = value;
             await this.plugin.saveSettings();
           }));
         

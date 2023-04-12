@@ -1,8 +1,8 @@
 {
     "id": "obsidian-openai-summary",
-    "name": "FlashCard Generator",
+    "name": "Phil-It-Yourself",
     "version": "0.1.0",
-    "description": "Summarize content and create a flashcard",
+    "description": "Personal Assistant",
     "author": "Philipp Reiner",
     "minAppVersion": "0.9.22",
     "main": "main.js"
