@@ -1,6 +1,0 @@
-{
-  "apiKey": "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",
-  "prompt": "Write (multiple) flashcards that summarize relevant key items from the content. Each flashcard has a defined format that must have 3 lines: A short question, then a single ? and a third line with just the answer not longer than 2 sentences. A question is never numbered! Never output _ or - and any lines. Separate flashcards only with an empty linebreak. \n\nExample: \n\nWhat are Flashcards?\n?\nSummaries for Learning.\n\nNever use sources, related items, links, topics and common knowledge. Use the #tags provided. Correct facts if needed. If the content is short, find one more flashcard with a content related question. The Content:",
-  "folderPath": "07-learning",
-  "moreContentPrompt": "What are more facts not mentioned in the input? Extend based on the input with more related and relevant facts in keywords. Find new details or examples. Never repeat or summarize the content. Answer starts with bullet points, no other text allowed before or after.  Format the answer the same writing style and language as the input. Short enough for a slidedeck, a full sentence is not required. Be creative. Ignore #tags, sources and links. Always answer. The input:"
-}
