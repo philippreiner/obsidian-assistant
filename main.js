@@ -17,7 +17,7 @@ class OpenAISummaryPlugin extends Plugin {
 
 
     this.addSettingTab(new OpenAISummarySettingTab(this.app, this));
-    this.settings = await this.loadData() || { apiKey: '', prompt: 'Create short flashcards for:', moreContentPrompt: 'Give additional facts about this topic in short bullet points:', folderPath: '07-learning' };
+    this.settings = await this.loadData() || { apiKey: '', prompt: 'Create short flashcards for:', moreContentPrompt: 'Give additional facts about this topic in short bullet points:', folderPath: '07-learning', blacklist: '' };
   }
 
 
@@ -67,7 +67,7 @@ class OpenAISummaryPlugin extends Plugin {
       const summaryFileName = `Flashcard-${currentFile.basename}.md`;
       const summaryFilePath = `${summaryFolderPath}/${summaryFileName}`;
   
-      const link = `[[${summaryFilePath}|Learning Flashcard]]`;
+      const link = `[[${summaryFilePath}|👨‍🏫 Learning Flashcard]]`;
       const editor = this.app.workspace.activeLeaf.view.sourceMode.cmEditor;
       editor.replaceRange(link, cursorPosition);
       editor.focus();
@@ -134,6 +134,12 @@ class OpenAISummaryPlugin extends Plugin {
     const currentFile = this.app.workspace.getActiveFile();
     const fileName = currentFile.basename;
     const prompt = promptType === 'summary' ? this.settings.prompt : this.settings.moreContentPrompt;
+    const blacklist = this.settings.blacklist.split('\n').map(line => line.split('=')).filter(pair => pair.length === 2);
+
+    let filteredContent = content;
+    for (const [target, replacement] of blacklist) {
+      filteredContent = filteredContent.split(target).join(replacement);
+    }
 
     const requestOptions = {
       method: 'POST',
@@ -149,7 +155,7 @@ class OpenAISummaryPlugin extends Plugin {
           },
           {
             role: "user",
-            content: `${prompt}  \n${fileName}\n${content}`
+            content: `${prompt}  \n${fileName}\n${filteredContent}`
           }],
         max_tokens: 512,
         model: "gpt-3.5-turbo",
@@ -163,7 +169,14 @@ class OpenAISummaryPlugin extends Plugin {
       const data = await response.json();
 
       if (data.choices && data.choices.length > 0) {
-        return data.choices[0].message.content.trim();
+        let result = data.choices[0].message.content.trim();
+
+        // Swap back the original words
+        for (const [target, replacement] of blacklist) {
+          result = result.split(replacement).join(target);
+        }
+
+        return result;
       }
     } catch (error) {
       console.error('Error fetching summary:', error);
@@ -231,10 +244,19 @@ class OpenAISummarySettingTab extends PluginSettingTab {
             this.plugin.settings.moreContentPrompt = value;
             await this.plugin.saveSettings();
           }));
+
+          containerEl.createEl('h2', { text: 'General Blacklist' });
+          new Setting(containerEl)
+          .setName('Blacklist')
+          .setDesc('Enter target=replacement pairs, one per line')
+          .addTextArea((textarea) => textarea
+            .setPlaceholder('target=replacement\n...')
+            .setValue(this.plugin.settings.blacklist)
+            .onChange(async (value) => {
+              this.plugin.settings.blacklist = value;
+              await this.plugin.saveSettings();
+            }));
         
   }
 }
-
-
-
 module.exports = OpenAISummaryPlugin;
